@@ -56,7 +56,7 @@ export default function LiveBusViewer() {
   const [trackError, setTrackError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
-  const [showVehicleNameTags, setShowVehicleNameTags] = useState(false);
+  const [showVehicleNameTags, setShowVehicleNameTags] = useState(true);
   const [showStopNameTags, setShowStopNameTags] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -573,6 +573,10 @@ export default function LiveBusViewer() {
             {error && <p>{error}</p>}
           </div>
         )}
+
+        <p className="viewer-disclaimer" role="note">
+          Hinweis: Dieses Projekt ist ein inoffizielles Hobbyprojekt und steht in keiner Verbindung zur KVG.
+        </p>
       </section>
 
       <aside className={isPanelOpen ? "viewer-panel is-open" : "viewer-panel"}>
