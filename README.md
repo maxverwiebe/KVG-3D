@@ -2,6 +2,9 @@
 
 Interactive 3D tracker for KVG buses in Kiel with an OpenStreetMap base layer and live data from the KVG Internet Service API.
 
+<img width="1458" height="766" alt="image" src="https://github.com/user-attachments/assets/c4ade71c-86d9-4e1e-bedb-49a2aa93feae" />
+
+
 ## Features
 
 - OpenStreetMap as a real base map (MapLibre)
