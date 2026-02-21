@@ -1,16 +1,16 @@
 # KVG 3D Live Bus Viewer (Next.js + MapLibre + OSM)
 
-Interaktiver 3D-Tracker fur KVG-Busse in Kiel mit OpenStreetMap-Untergrund und Live-Daten aus der KVG Internetservice API.
+Interactive 3D tracker for KVG buses in Kiel with an OpenStreetMap base layer and live data from the KVG Internet Service API.
 
 ## Features
 
-- OpenStreetMap als echte Basiskarte (MapLibre)
-- 3D-Busdarstellung als Extrusionen auf dem Strassennetz
-- Live-Fahrzeugpositionen (Polling alle 10 Sekunden)
-- Haltestellen als Live-Layer auf der Karte
-- Klickbare Busse mit Live-Details (ID, Trip, Heading, Koordinaten)
-- Track-Anzeige fur den ausgewaehlten Bus (Trip-Pfad)
-- Server-seitiger API-Proxy uber Next.js (`/api/kvg/snapshot`)
+- OpenStreetMap as a real base map (MapLibre)
+- 3D bus visualization as extrusions on the road network
+- Live vehicle positions (polling every 10 seconds)
+- Stops as a live layer on the map
+- Clickable buses with live details (ID, trip, heading, coordinates)
+- Track display for the selected bus (trip path)
+- Server-side API proxy via Next.js (`/api/kvg/snapshot`)
 
 ## Start
 
@@ -19,14 +19,14 @@ npm install
 npm run dev
 ```
 
-Danach im Browser: `http://localhost:3000`
+Then in the browser: `http://localhost:3000`
 
-## API-Hinweise
+## API Notes
 
-Die Daten werden serverseitig uber diese Endpunkte geholt:
+The data is fetched server-side via these endpoints:
 
-- `.../vehicleinfo/vehicles` (POST, mit `cacheBuster` und `positionType=RAW`)
-- `.../stopinfo/stops` (POST, Bounding Box als Form-Data)
-- `.../pathinfo/trip` (POST, fur den Track eines ausgewaehlten Trips)
+- `.../vehicleinfo/vehicles` (POST, with cacheBuster and positionType=RAW)
+- `.../stopinfo/stops` (POST, bounding box as form data)
+- `.../pathinfo/trip` (POST, for the track of a selected trip)
 
-Damit wird CORS im Browser vermieden und die App kann sauber live aktualisieren.
+This avoids CORS in the browser and allows the app to update cleanly in real time.
