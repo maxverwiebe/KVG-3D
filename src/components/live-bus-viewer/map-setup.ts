@@ -1,6 +1,7 @@
 import maplibregl from "maplibre-gl";
 
 import {
+  EMPTY_FLIGHTS,
   EMPTY_STOPS,
   EMPTY_TRACK,
   EMPTY_VEHICLE_DIRECTION,
@@ -10,6 +11,8 @@ import {
 
 export const MAP_SOURCE_IDS = {
   stops: "kvg-stops",
+  flights: "kvg-flights",
+  buildings: "kvg-buildings",
   selectedTrack: "kvg-selected-track",
   vehicles: "kvg-vehicles",
   vehicleLabelPoints: "kvg-vehicle-label-points",
@@ -17,10 +20,13 @@ export const MAP_SOURCE_IDS = {
 } as const;
 
 export const MAP_LAYER_IDS = {
+  buildings: "kvg-buildings-3d",
   stops: "kvg-stops-layer",
   selectedStops: "kvg-stops-selected-layer",
   stopLabelsTrip: "kvg-stop-labels-trip",
   stopLabels: "kvg-stop-labels",
+  flights: "kvg-flights-layer",
+  flightLabels: "kvg-flight-labels",
   trackGlow: "kvg-track-glow",
   trackLine: "kvg-track-line",
   vehicles: "kvg-vehicles-layer",
@@ -38,7 +44,12 @@ const STOP_INTERACTION_LAYERS = [
 
 const POINTER_LAYERS = [MAP_LAYER_IDS.vehicles, ...STOP_INTERACTION_LAYERS] as const;
 
-const INTERACTIVE_LAYERS = [MAP_LAYER_IDS.vehicles, ...STOP_INTERACTION_LAYERS] as const;
+const INTERACTIVE_LAYERS = [
+  MAP_LAYER_IDS.vehicles,
+  MAP_LAYER_IDS.flights,
+  MAP_LAYER_IDS.flightLabels,
+  ...STOP_INTERACTION_LAYERS
+] as const;
 
 type VehicleClickPayload = {
   id: string;
@@ -59,9 +70,62 @@ type MapInteractionHandlers = {
 };
 
 export function addKvgSourcesAndLayers(map: maplibregl.Map): void {
+  map.addSource(MAP_SOURCE_IDS.buildings, {
+    type: "vector",
+    url: "https://tiles.openfreemap.org/planet"
+  });
+
+  map.addLayer({
+    id: MAP_LAYER_IDS.buildings,
+    type: "fill-extrusion",
+    source: MAP_SOURCE_IDS.buildings,
+    "source-layer": "building",
+    minzoom: 14.4,
+    filter: ["all", ["!=", ["get", "hide_3d"], true], [">", ["coalesce", ["get", "render_height"], 0], 1]],
+    paint: {
+      "fill-extrusion-color": [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["get", "render_height"], 0],
+        0,
+        "#dce3ea",
+        40,
+        "#d1dae5",
+        120,
+        "#c0ccd9",
+        260,
+        "#acbccd"
+      ],
+      "fill-extrusion-height": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        14.4,
+        0,
+        15.4,
+        ["coalesce", ["get", "render_height"], 0]
+      ],
+      "fill-extrusion-base": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        14.4,
+        0,
+        15.4,
+        ["coalesce", ["get", "render_min_height"], 0]
+      ],
+      "fill-extrusion-opacity": 0.88
+    }
+  });
+
   map.addSource(MAP_SOURCE_IDS.stops, {
     type: "geojson",
     data: EMPTY_STOPS
+  });
+
+  map.addSource(MAP_SOURCE_IDS.flights, {
+    type: "geojson",
+    data: EMPTY_FLIGHTS
   });
 
   map.addLayer({
@@ -131,6 +195,58 @@ export function addKvgSourcesAndLayers(map: maplibregl.Map): void {
       "text-color": "#556176",
       "text-halo-color": "rgba(255,255,255,0.95)",
       "text-halo-width": 1.4
+    }
+  });
+
+  map.addLayer({
+    id: MAP_LAYER_IDS.flights,
+    type: "fill-extrusion",
+    source: MAP_SOURCE_IDS.flights,
+    layout: {
+      visibility: "none"
+    },
+    paint: {
+      "fill-extrusion-color": [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["get", "altitudeMeters"], 0],
+        0,
+        "#cbd5e1",
+        1000,
+        "#bfdbfe",
+        3000,
+        "#93c5fd",
+        7000,
+        "#60a5fa",
+        11000,
+        "#38bdf8"
+      ],
+      "fill-extrusion-base": ["coalesce", ["get", "renderBaseMeters"], 180],
+      "fill-extrusion-height": ["coalesce", ["get", "renderTopMeters"], 270],
+      "fill-extrusion-opacity": 0.96
+    }
+  });
+
+  map.addLayer({
+    id: MAP_LAYER_IDS.flightLabels,
+    type: "symbol",
+    source: MAP_SOURCE_IDS.flights,
+    minzoom: 9.5,
+    layout: {
+      "text-field": ["get", "callsign"],
+      "text-font": ["Open Sans Semibold", "Noto Sans Regular"],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 9.5, 9.5, 14, 11.5, 17, 13],
+      "text-anchor": "top",
+      "text-offset": [0, 0.85],
+      "text-allow-overlap": false,
+      "text-ignore-placement": false,
+      visibility: "none"
+    },
+    paint: {
+      "text-color": "#0f172a",
+      "text-halo-color": "rgba(255,255,255,0.96)",
+      "text-halo-width": 1.6,
+      "text-opacity": 0.95
     }
   });
 
@@ -305,5 +421,15 @@ export function setNameTagVisibility(
 
   if (map.getLayer(MAP_LAYER_IDS.stopLabels)) {
     map.setLayoutProperty(MAP_LAYER_IDS.stopLabels, "visibility", showStopNameTags ? "visible" : "none");
+  }
+}
+
+export function setFlightVisibility(map: maplibregl.Map, showFlights: boolean): void {
+  if (map.getLayer(MAP_LAYER_IDS.flights)) {
+    map.setLayoutProperty(MAP_LAYER_IDS.flights, "visibility", showFlights ? "visible" : "none");
+  }
+
+  if (map.getLayer(MAP_LAYER_IDS.flightLabels)) {
+    map.setLayoutProperty(MAP_LAYER_IDS.flightLabels, "visibility", showFlights ? "visible" : "none");
   }
 }

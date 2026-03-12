@@ -1,9 +1,11 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 
+import type { LiveFlight } from "@/lib/flights";
 import type { LiveStop, LiveVehicle } from "@/lib/kvg";
 
 import { MAX_STOPS_IN_MAP } from "@/components/live-bus-viewer/constants";
 import type {
+  FlightProperties,
   StopProperties,
   TrackProperties,
   VehicleDirectionProperties,
@@ -24,6 +26,11 @@ export const EMPTY_STOPS: FeatureCollection<Point, StopProperties> = {
 };
 
 export const EMPTY_VEHICLE_LABELS: FeatureCollection<Point, VehicleLabelProperties> = {
+  type: "FeatureCollection",
+  features: []
+};
+
+export const EMPTY_FLIGHTS: FeatureCollection<Polygon, FlightProperties> = {
   type: "FeatureCollection",
   features: []
 };
@@ -100,6 +107,77 @@ function toStopFeature(stop: LiveStop, isTripStop: boolean): Feature<Point, Stop
   };
 }
 
+const FLIGHT_BODY_HEIGHT_METERS = 90;
+const FLIGHT_ALTITUDE_VISUAL_MIN_METERS = 180;
+const FLIGHT_ALTITUDE_VISUAL_MAX_METERS = 4_800;
+const FLIGHT_ALTITUDE_VISUAL_SCALE = 0.16;
+
+function toFlightVisualBaseMeters(altitudeMeters: number | null): number {
+  const rawAltitude = altitudeMeters ?? 0;
+  const scaledAltitude = rawAltitude * FLIGHT_ALTITUDE_VISUAL_SCALE + FLIGHT_ALTITUDE_VISUAL_MIN_METERS;
+  return Math.max(
+    FLIGHT_ALTITUDE_VISUAL_MIN_METERS,
+    Math.min(FLIGHT_ALTITUDE_VISUAL_MAX_METERS, scaledAltitude)
+  );
+}
+
+function toFlightFeature(flight: LiveFlight): Feature<Polygon, FlightProperties> {
+  const theta = (flight.heading * Math.PI) / 180;
+  // Top-down silhouette for a simple aircraft shape (nose, wings, tailplane)
+  const localShape: [number, number][] = [
+    [0, 20],
+    [2.2, 11.5],
+    [4.4, 8.4],
+    [16.2, 5.2],
+    [15.2, 2.1],
+    [4.8, 3.1],
+    [2.2, -6.6],
+    [6.8, -10.2],
+    [5.8, -12.6],
+    [1.8, -10.6],
+    [0.9, -18.1],
+    [0, -20],
+    [-0.9, -18.1],
+    [-1.8, -10.6],
+    [-5.8, -12.6],
+    [-6.8, -10.2],
+    [-2.2, -6.6],
+    [-4.8, 3.1],
+    [-15.2, 2.1],
+    [-16.2, 5.2],
+    [-4.4, 8.4],
+    [-2.2, 11.5],
+    [0, 20]
+  ];
+
+  const corners = localShape.map(([eastLocal, northLocal]) => {
+    const east = eastLocal * Math.cos(theta) + northLocal * Math.sin(theta);
+    const north = -eastLocal * Math.sin(theta) + northLocal * Math.cos(theta);
+    const [lngOffset, latOffset] = metersToLngLatOffset(flight.latitude, east, north);
+
+    return [flight.longitude + lngOffset, flight.latitude + latOffset] as [number, number];
+  });
+
+  const renderBaseMeters = toFlightVisualBaseMeters(flight.altitudeMeters);
+
+  return {
+    type: "Feature",
+    id: flight.id,
+    properties: {
+      id: flight.id,
+      callsign: flight.callsign,
+      heading: flight.heading,
+      altitudeMeters: flight.altitudeMeters,
+      renderBaseMeters,
+      renderTopMeters: renderBaseMeters + FLIGHT_BODY_HEIGHT_METERS
+    },
+    geometry: {
+      type: "Polygon",
+      coordinates: [corners]
+    }
+  };
+}
+
 export function buildVehicleCollection(
   vehicles: LiveVehicle[],
   selectedVehicleId: string | null
@@ -159,6 +237,21 @@ export function buildVehicleLabelCollection(
         coordinates: [vehicle.longitude, vehicle.latitude]
       }
     }))
+  };
+}
+
+export function buildFlightCollection(flights: LiveFlight[]): FeatureCollection<Polygon, FlightProperties> {
+  return {
+    type: "FeatureCollection",
+    features: flights
+      .filter(
+        (flight) =>
+          Number.isFinite(flight.latitude) &&
+          Number.isFinite(flight.longitude) &&
+          flight.latitude !== 0 &&
+          flight.longitude !== 0
+      )
+      .map(toFlightFeature)
   };
 }
 

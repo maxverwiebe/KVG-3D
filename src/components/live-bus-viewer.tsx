@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  FLIGHT_POLL_INTERVAL_MS,
   KIEL_BOUNDS,
   MAX_STOPS_IN_MAP,
   MAX_VEHICLES_IN_LIST,
@@ -12,6 +13,7 @@ import {
   POLL_INTERVAL_MS
 } from "@/components/live-bus-viewer/constants";
 import {
+  buildFlightCollection,
   buildStopCollection,
   buildTrackCollection,
   buildVehicleCollection,
@@ -22,11 +24,13 @@ import {
   addKvgSourcesAndLayers,
   MAP_SOURCE_IDS,
   registerMapInteractionHandlers,
+  setFlightVisibility,
   setNameTagVisibility
 } from "@/components/live-bus-viewer/map-setup";
 import { formatTimestamp, renderStopPopupContent } from "@/components/live-bus-viewer/popup-content";
 import { buildSearchResults, buildSearchableStops } from "@/components/live-bus-viewer/search";
 import type { SearchResult, StopDetailsPayload } from "@/components/live-bus-viewer/types";
+import type { FlightsSnapshotPayload, LiveFlight } from "@/lib/flights";
 import {
   KIEL_CENTER,
   type LiveStop,
@@ -46,9 +50,11 @@ export default function LiveBusViewer() {
   const [vehicles, setVehicles] = useState<LiveVehicle[]>([]);
   const [stops, setStops] = useState<LiveStop[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [flights, setFlights] = useState<LiveFlight[]>([]);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flightError, setFlightError] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<[number, number][]>([]);
   const [selectedTripStops, setSelectedTripStops] = useState<LiveStop[]>([]);
   const [trackTripId, setTrackTripId] = useState<string | null>(null);
@@ -58,6 +64,7 @@ export default function LiveBusViewer() {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [showVehicleNameTags, setShowVehicleNameTags] = useState(true);
   const [showStopNameTags, setShowStopNameTags] = useState(false);
+  const [showFlights, setShowFlights] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -80,6 +87,7 @@ export default function LiveBusViewer() {
     () => buildVehicleCollection(vehicles, selectedVehicleId),
     [vehicles, selectedVehicleId]
   );
+  const flightCollection = useMemo(() => buildFlightCollection(flights), [flights]);
 
   const stopCollection = useMemo(
     () => buildStopCollection(stops, selectedTripStops),
@@ -221,6 +229,7 @@ export default function LiveBusViewer() {
     }
 
     const vehicleSource = map.getSource(MAP_SOURCE_IDS.vehicles) as GeoJSONSource | undefined;
+    const flightSource = map.getSource(MAP_SOURCE_IDS.flights) as GeoJSONSource | undefined;
     const stopSource = map.getSource(MAP_SOURCE_IDS.stops) as GeoJSONSource | undefined;
     const vehicleLabelSource = map.getSource(MAP_SOURCE_IDS.vehicleLabelPoints) as GeoJSONSource | undefined;
     const vehicleDirectionSource = map.getSource(MAP_SOURCE_IDS.vehicleDirection) as GeoJSONSource | undefined;
@@ -228,6 +237,10 @@ export default function LiveBusViewer() {
 
     if (vehicleSource) {
       vehicleSource.setData(vehicleCollection);
+    }
+
+    if (flightSource) {
+      flightSource.setData(flightCollection);
     }
 
     if (stopSource) {
@@ -247,6 +260,7 @@ export default function LiveBusViewer() {
     }
   }, [
     mapReady,
+    flightCollection,
     stopCollection,
     trackCollection,
     vehicleCollection,
@@ -276,6 +290,25 @@ export default function LiveBusViewer() {
     }
   }, []);
 
+  const fetchFlights = useCallback(async () => {
+    try {
+      const response = await fetch("/api/flights/snapshot", {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as FlightsSnapshotPayload;
+      setFlights(payload.flights ?? []);
+      setFlightError(null);
+    } catch {
+      setFlights([]);
+      setFlightError("Flugdaten aktuell nicht verfuegbar.");
+    }
+  }, []);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
       return;
@@ -286,8 +319,11 @@ export default function LiveBusViewer() {
       style: OSM_STYLE,
       center: [KIEL_CENTER.longitude, KIEL_CENTER.latitude],
       zoom: 12.4,
-      pitch: 58,
+      pitch: 62,
       bearing: -16,
+      canvasContextAttributes: {
+        antialias: true
+      },
       maxBounds: KIEL_BOUNDS
     });
 
@@ -346,6 +382,24 @@ export default function LiveBusViewer() {
       clearInterval(interval);
     };
   }, [fetchSnapshot]);
+
+  useEffect(() => {
+    if (!showFlights) {
+      setFlights([]);
+      setFlightError(null);
+      return;
+    }
+
+    void fetchFlights();
+
+    const interval = setInterval(() => {
+      void fetchFlights();
+    }, FLIGHT_POLL_INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [fetchFlights, showFlights]);
 
   useEffect(() => {
     const selectedTripId = selectedVehicle?.tripId;
@@ -435,7 +489,8 @@ export default function LiveBusViewer() {
     }
 
     setNameTagVisibility(map, showVehicleNameTags, showStopNameTags);
-  }, [mapReady, showStopNameTags, showVehicleNameTags]);
+    setFlightVisibility(map, showFlights);
+  }, [mapReady, showFlights, showStopNameTags, showVehicleNameTags]);
 
   useEffect(() => {
     if (selectedVehicleId && !vehicles.some((vehicle) => vehicle.id === selectedVehicleId)) {
@@ -615,6 +670,12 @@ export default function LiveBusViewer() {
                 <span>Intervall</span>
                 <strong>{POLL_INTERVAL_MS / 1000}s</strong>
               </article>
+              {showFlights && (
+                <article className="stat-card">
+                  <span>Flugzeuge</span>
+                  <strong>{flights.length}</strong>
+                </article>
+              )}
             </div>
 
             <div className="toggle-grid">
@@ -635,7 +696,18 @@ export default function LiveBusViewer() {
                 />
                 <span>Haltestellen-Nametags</span>
               </label>
+
+              <label className="toggle-item">
+                <input
+                  type="checkbox"
+                  checked={showFlights}
+                  onChange={(event) => setShowFlights(event.target.checked)}
+                />
+                <span>Flugzeuge anzeigen (Beta)</span>
+              </label>
             </div>
+
+            {showFlights && flightError && <p className="panel-empty">{flightError}</p>}
           </section>
 
           <section className="panel-block">

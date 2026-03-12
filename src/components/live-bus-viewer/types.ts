@@ -23,6 +23,15 @@ export type VehicleLabelProperties = {
   selected: 0 | 1;
 };
 
+export type FlightProperties = {
+  id: string;
+  callsign: string;
+  heading: number;
+  altitudeMeters: number | null;
+  renderBaseMeters: number;
+  renderTopMeters: number;
+};
+
 export type TrackProperties = {
   tripId: string;
 };
