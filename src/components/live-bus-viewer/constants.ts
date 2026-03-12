@@ -1,7 +1,6 @@
 import type { StyleSpecification } from "maplibre-gl";
 
 export const POLL_INTERVAL_MS = 10_000;
-export const FLIGHT_POLL_INTERVAL_MS = 20_000;
 export const MAX_STOPS_IN_MAP = 4_000;
 export const MAX_VEHICLES_IN_LIST = 120;
 export const MAX_POPUP_DEPARTURES = 8;
